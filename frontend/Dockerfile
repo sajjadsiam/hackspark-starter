@@ -13,6 +13,10 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
+# Ensure /app/public exists even if the project has no public assets,
+# so the COPY in the runtime stage never fails on a clean checkout.
+RUN mkdir -p /app/public
+
 # ── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM node:20-alpine AS runtime
 LABEL stage=runtime

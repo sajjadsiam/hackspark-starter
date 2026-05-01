@@ -1,0 +1,293 @@
+{
+    "info": {
+        "_postman_id": "1e1e54ef-6dd3-4f0c-9d91-2feb919bd7df",
+        "name": "RentPi - Hackspark Mastery V2",
+        "description": "Comprehensive Postman collection for all RentPi microservices including Bonus B1 (gRPC) and B2 (Rate Limiting).",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Foundation (Chapter 1)",
+            "item": [
+                {
+                    "name": "P1: Health Aggregator (Gateway)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "http://localhost:8000/status"
+                    }
+                },
+                {
+                    "name": "P2: Register User",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"Secret123!\"\n}"
+                        },
+                        "url": "http://localhost:8000/users/register"
+                    }
+                },
+                {
+                    "name": "P2: Login User",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"Secret123!\"\n}"
+                        },
+                        "url": "http://localhost:8000/users/login"
+                    }
+                },
+                {
+                    "name": "P2: Current User (Me)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": "http://localhost:8000/users/me"
+                    }
+                },
+                {
+                    "name": "P3: Product Proxy - List",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "http://localhost:8000/rentals/products"
+                    }
+                },
+                {
+                    "name": "P3: Product Proxy - Detail",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "http://localhost:8000/rentals/products/1"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Data Layer (Chapter 2)",
+            "item": [
+                {
+                    "name": "P5: Paginated Product Filter",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "http://localhost:8000/rentals/products?category=ELECTRONICS&page=1&limit=10",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8000",
+                            "path": [
+                                "rentals",
+                                "products"
+                            ],
+                            "query": [
+                                {
+                                    "key": "category",
+                                    "value": "ELECTRONICS"
+                                },
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "10"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "P6: Loyalty Discount",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "http://localhost:8000/users/42/discount"
+                    }
+                },
+                {
+                    "name": "P7: Product Availability",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "http://localhost:8000/rentals/products/1/availability?from=2024-03-01&to=2024-03-14",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8000",
+                            "path": [
+                                "rentals",
+                                "products",
+                                "1",
+                                "availability"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "2024-03-01"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "2024-03-14"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "P8: Kth Busiest Month",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "http://localhost:8000/analytics/kth-busiest?k=1"
+                    }
+                },
+                {
+                    "name": "P9: Top Categories for User",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "http://localhost:8000/rentals/users/101/top-categories?k=5"
+                    }
+                },
+                {
+                    "name": "P10: Product Free Streak",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "http://localhost:8000/rentals/products/77/free-streak?year=2023"
+                    }
+                },
+                {
+                    "name": "P12: Merged Rental Feed",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "http://localhost:8000/rentals/merged-feed?productIds=1,2,3&limit=10"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Intelligence Layer (Chapter 3)",
+            "item": [
+                {
+                    "name": "P11: Seven-Day Rush (Peak Window)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "http://localhost:8000/analytics/peak-window?from=2024-01&to=2024-06"
+                    }
+                },
+                {
+                    "name": "P13: Surge Days Detection",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "http://localhost:8000/analytics/surge-days?month=2024-03"
+                    }
+                },
+                {
+                    "name": "P14: Seasonal Recommendations",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "http://localhost:8000/analytics/recommendations?date=2024-06-15&limit=10"
+                    }
+                },
+                {
+                    "name": "P15: AI Assistant Chat",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"sessionId\": \"postman-session\",\n  \"message\": \"What is the peak rental period this year?\"\n}"
+                        },
+                        "url": "http://localhost:8000/chat"
+                    }
+                },
+                {
+                    "name": "P16: Chat Session List",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "http://localhost:8000/chat/sessions"
+                    }
+                },
+                {
+                    "name": "P16: Chat History",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "http://localhost:8000/chat/postman-session/history"
+                    }
+                },
+                {
+                    "name": "P16: Delete Session",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": "http://localhost:8000/chat/postman-session"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Bonus Tasks",
+            "item": [
+                {
+                    "name": "B1: gRPC Internal Communication",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "http://localhost:8000/chat?debug=grpc",
+                        "description": "Trigger a chatbot query that internally uses gRPC for grounding between agentic-service and analytics-service."
+                    }
+                },
+                {
+                    "name": "B2: Graceful Rate Limit Handling",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "http://localhost:8000/rentals/products?trigger_retry=true",
+                        "description": "Trigger a scenario that simulates a 429 response from the Central API to demonstrate exponential backoff with jitter (±20%) and the final 503 error after 3 retries."
+                    }
+                }
+            ]
+        }
+    ],
+    "variable": [
+        {
+            "key": "jwt_token",
+            "value": "PASTE_YOUR_JWT_HERE",
+            "type": "string"
+        }
+    ]
+}
