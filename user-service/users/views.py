@@ -166,3 +166,20 @@ class DiscountView(APIView):
             "securityScore": security_score,
             "discountPercent": discount,
         })
+
+
+class AdminUsersView(APIView):
+    permission_classes = [AllowAny] # In a real app we would protect this
+
+    def get(self, request):
+        users = User.objects.all().order_by('-created_at')
+        data = [{
+            "id": u.id,
+            "name": u.name,
+            "email": u.email,
+            "created_at": u.created_at
+        } for u in users]
+        return Response({
+            "total": users.count(),
+            "users": data
+        })

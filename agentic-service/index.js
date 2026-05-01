@@ -8,6 +8,7 @@ const mongoose = require('mongoose');
 const fetch = require('node-fetch');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const { getRecommendations } = require('./grpc_client/client');
 
 const app = express();
 const PORT = process.env.PORT || 8004;
@@ -105,9 +106,14 @@ async function gatherContext(message) {
 
   // Trending / recommendations
   if (lower.includes('trending') || lower.includes('recommend') || lower.includes('season') || lower.includes('what to rent')) {
-    const data = await fetchJSON(`${ANALYTICS_SERVICE_URL}/analytics/recommendations?date=${today}&limit=5`);
-    if (data?.recommendations) {
-      context += `\n[Today's Top Recommendations (${today})]: ${JSON.stringify(data.recommendations)}`;
+    try {
+      const recommendations = await getRecommendations(today, 5);
+      if (recommendations && recommendations.length > 0) {
+        context += `\n[Today's Top Recommendations (${today}) (via gRPC)]: ${JSON.stringify(recommendations)}`;
+      }
+    } catch (err) {
+      console.error('[gRPC] Failed to get recommendations:', err.message);
+      // Fallback or skip
     }
   }
 

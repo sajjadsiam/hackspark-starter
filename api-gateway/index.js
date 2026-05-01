@@ -57,10 +57,16 @@ app.get('/status', async (req, res) => {
 
 // ── Proxy Routes ─────────────────────────────────────────────────────────────
 
-function makeProxy(target) {
+function makeProxy(target, prefix) {
   return createProxyMiddleware({
     target,
     changeOrigin: true,
+    pathRewrite: (path, req) => {
+      // path here is the URL after Express stripped the mount point.
+      // So if mount point was /users, path is /admin/users
+      // We want to add /users back
+      return prefix + path;
+    },
     on: {
       error: (err, req, res) => {
         console.error(`[gateway] proxy error to ${target}:`, err.message);
@@ -73,10 +79,10 @@ function makeProxy(target) {
 }
 
 // Routes must be set BEFORE proxy middleware
-app.use('/users',     makeProxy(USER_SERVICE_URL));
-app.use('/rentals',   makeProxy(RENTAL_SERVICE_URL));
-app.use('/analytics', makeProxy(ANALYTICS_SERVICE_URL));
-app.use('/chat',      makeProxy(AGENTIC_SERVICE_URL));
+app.use(createProxyMiddleware('/users',     { target: USER_SERVICE_URL,      changeOrigin: true }));
+app.use(createProxyMiddleware('/rentals',   { target: RENTAL_SERVICE_URL,    changeOrigin: true }));
+app.use(createProxyMiddleware('/analytics', { target: ANALYTICS_SERVICE_URL,  changeOrigin: true }));
+app.use(createProxyMiddleware('/chat',      { target: AGENTIC_SERVICE_URL,   changeOrigin: true }));
 
 // ── Fallback ──────────────────────────────────────────────────────────────────
 
