@@ -65,7 +65,7 @@ services:
       agentic-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/status || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8000/status || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -89,7 +89,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8001/status || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8001/status || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -112,7 +112,7 @@ services:
       user-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8002/status || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8002/status || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -131,7 +131,7 @@ services:
       CENTRAL_API_URL:   ${CENTRAL_API_URL}
       CENTRAL_API_TOKEN: ${CENTRAL_API_TOKEN}
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8003/status || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8003/status || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -161,7 +161,7 @@ services:
       rental-service:        
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8004/status || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8004/status || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -183,7 +183,7 @@ services:
       api-gateway:
         condition: service_healthy
     healthcheck:                                     
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000 || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3

@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from decouple import config
+from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -14,6 +15,7 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.auth',
     'rest_framework',
+    'rest_framework_simplejwt',
     'corsheaders',
     'users',
 ]
@@ -25,7 +27,6 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'core.urls'
-
 WSGI_APPLICATION = 'core.wsgi.application'
 
 DATABASES = {
@@ -39,7 +40,7 @@ DATABASES = {
     }
 }
 
-# Parse DATABASE_URL if provided
+# Parse DATABASE_URL if provided (takes priority)
 DATABASE_URL = config('DATABASE_URL', default=None)
 if DATABASE_URL:
     import re
@@ -71,11 +72,9 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny',
     ],
 }
-
-from datetime import timedelta
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=7),
@@ -89,8 +88,9 @@ CORS_ALLOW_ALL_ORIGINS = True
 PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.Argon2PasswordHasher',
     'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
 ]
 
 # Central API
-CENTRAL_API_URL = config('CENTRAL_API_URL', default='https://technocracy.brittoo.xyz')
+CENTRAL_API_URL   = config('CENTRAL_API_URL',   default='https://technocracy.brittoo.xyz')
 CENTRAL_API_TOKEN = config('CENTRAL_API_TOKEN', default='')

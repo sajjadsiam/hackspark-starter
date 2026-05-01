@@ -1,8 +1,7 @@
 /**
  * RentPi API Gateway
- * - Routes all traffic to downstream services
- * - Aggregates /status from all services in parallel
- * - Single entry point at :8000
+ * Routes all traffic to downstream services.
+ * Aggregates /status from all services in parallel (P1).
  */
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
@@ -20,24 +19,28 @@ const AGENTIC_SERVICE_URL   = process.env.AGENTIC_SERVICE_URL   || 'http://agent
 app.use(cors());
 app.use(express.json());
 
-// ── Health Aggregator ────────────────────────────────────────────────────────
+// ── Health Aggregator (P1) ────────────────────────────────────────────────────
 
-async function checkService(name, url) {
+async function checkService(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
   try {
-    const resp = await fetch(`${url}/status`, { timeout: 5000 });
+    const resp = await fetch(`${url}/status`, { signal: controller.signal });
+    clearTimeout(timer);
     if (resp.ok) return 'OK';
     return 'UNREACHABLE';
   } catch {
+    clearTimeout(timer);
     return 'UNREACHABLE';
   }
 }
 
 app.get('/status', async (req, res) => {
   const [userStatus, rentalStatus, analyticsStatus, agenticStatus] = await Promise.all([
-    checkService('user-service',      USER_SERVICE_URL),
-    checkService('rental-service',    RENTAL_SERVICE_URL),
-    checkService('analytics-service', ANALYTICS_SERVICE_URL),
-    checkService('agentic-service',   AGENTIC_SERVICE_URL),
+    checkService(USER_SERVICE_URL),
+    checkService(RENTAL_SERVICE_URL),
+    checkService(ANALYTICS_SERVICE_URL),
+    checkService(AGENTIC_SERVICE_URL),
   ]);
 
   res.json({
@@ -54,33 +57,39 @@ app.get('/status', async (req, res) => {
 
 // ── Proxy Routes ─────────────────────────────────────────────────────────────
 
-const proxyOpts = (target) => ({
-  target,
-  changeOrigin: true,
-  on: {
-    error: (err, req, res) => {
-      console.error(`[gateway] proxy error to ${target}:`, err.message);
-      if (!res.headersSent) {
-        res.status(502).json({ error: 'Bad Gateway', service: target });
+function makeProxy(target) {
+  return createProxyMiddleware({
+    target,
+    changeOrigin: true,
+    on: {
+      error: (err, req, res) => {
+        console.error(`[gateway] proxy error to ${target}:`, err.message);
+        if (res && !res.headersSent) {
+          res.status(502).json({ error: 'Bad Gateway', target });
+        }
       }
     }
-  }
+  });
+}
+
+// Routes must be set BEFORE proxy middleware
+app.use('/users',     makeProxy(USER_SERVICE_URL));
+app.use('/rentals',   makeProxy(RENTAL_SERVICE_URL));
+app.use('/analytics', makeProxy(ANALYTICS_SERVICE_URL));
+app.use('/chat',      makeProxy(AGENTIC_SERVICE_URL));
+
+// ── Fallback ──────────────────────────────────────────────────────────────────
+
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found', path: req.path });
 });
-
-// User service routes
-app.use('/users',   createProxyMiddleware(proxyOpts(USER_SERVICE_URL)));
-
-// Rental service routes
-app.use('/rentals', createProxyMiddleware(proxyOpts(RENTAL_SERVICE_URL)));
-
-// Analytics service routes
-app.use('/analytics', createProxyMiddleware(proxyOpts(ANALYTICS_SERVICE_URL)));
-
-// Agentic service routes
-app.use('/chat', createProxyMiddleware(proxyOpts(AGENTIC_SERVICE_URL)));
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[api-gateway] listening on port ${PORT}`);
+  console.log(`  user-service:      ${USER_SERVICE_URL}`);
+  console.log(`  rental-service:    ${RENTAL_SERVICE_URL}`);
+  console.log(`  analytics-service: ${ANALYTICS_SERVICE_URL}`);
+  console.log(`  agentic-service:   ${AGENTIC_SERVICE_URL}`);
 });

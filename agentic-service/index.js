@@ -1,6 +1,6 @@
 /**
  * RentPi Agentic Service
- * P15: AI chatbot grounded in real data
+ * P15: AI chatbot grounded in real data (keyword guard + data grounding + Gemini)
  * P16: Persistent chat sessions in MongoDB
  */
 const express = require('express');
@@ -22,7 +22,7 @@ const CENTRAL_API_TOKEN     = process.env.CENTRAL_API_TOKEN     || '';
 app.use(cors());
 app.use(express.json());
 
-// ── MongoDB Models ────────────────────────────────────────────────────────────
+// ── MongoDB Models ─────────────────────────────────────────────────────────────
 
 const SessionSchema = new mongoose.Schema({
   sessionId:     { type: String, unique: true, index: true, required: true },
@@ -41,7 +41,7 @@ const MessageSchema = new mongoose.Schema({
 const Session = mongoose.model('Session', SessionSchema);
 const Message = mongoose.model('Message', MessageSchema);
 
-// ── Keyword Guard (P15) ───────────────────────────────────────────────────────
+// ── Keyword Guard (P15) ────────────────────────────────────────────────────────
 
 const RENTPI_KEYWORDS = [
   'rental', 'rent', 'product', 'category', 'categories', 'price', 'discount',
@@ -49,6 +49,7 @@ const RENTPI_KEYWORDS = [
   'surge', 'peak', 'trending', 'recommend', 'season', 'electronics', 'vehicles',
   'tools', 'outdoor', 'sports', 'music', 'furniture', 'cameras', 'office',
   'security score', 'most rented', 'busiest', 'free streak', 'vacation',
+  'how many', 'when', 'which', 'what category', 'top', 'popular',
 ];
 
 function isOnTopic(message) {
@@ -56,11 +57,24 @@ function isOnTopic(message) {
   return RENTPI_KEYWORDS.some(kw => lower.includes(kw));
 }
 
-// ── Data Grounding ────────────────────────────────────────────────────────────
+// ── Fetch with timeout helper ─────────────────────────────────────────────────
+
+async function fetchWithTimeout(url, opts = {}, timeoutMs = 10000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const resp = await fetch(url, { ...opts, signal: controller.signal });
+    clearTimeout(timer);
+    return resp;
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
+  }
+}
 
 async function fetchJSON(url, opts = {}) {
   try {
-    const resp = await fetch(url, { timeout: 10000, ...opts });
+    const resp = await fetchWithTimeout(url, opts, 10000);
     if (!resp.ok) return null;
     return await resp.json();
   } catch {
@@ -68,57 +82,63 @@ async function fetchJSON(url, opts = {}) {
   }
 }
 
+// ── Data Grounding (P15) ──────────────────────────────────────────────────────
+
 async function gatherContext(message) {
   const lower = message.toLowerCase();
   let context = '';
   const today = new Date().toISOString().slice(0, 10);
   const currentMonth = today.slice(0, 7);
 
+  const centralHeaders = { 'Authorization': `Bearer ${CENTRAL_API_TOKEN}` };
+
   // Category stats
-  if (lower.includes('category') || lower.includes('categor') || lower.includes('most rented') || lower.includes('popular')) {
-    const data = await fetchJSON(`${CENTRAL_API_URL}/api/data/rentals/stats?group_by=category`, {
-      headers: { 'Authorization': `Bearer ${CENTRAL_API_TOKEN}` }
-    });
+  if (lower.includes('category') || lower.includes('most rented') || lower.includes('popular')) {
+    const data = await fetchJSON(
+      `${CENTRAL_API_URL}/api/data/rentals/stats?group_by=category`,
+      { headers: centralHeaders }
+    );
     if (data?.data) {
-      context += `\n[Category Stats]: ${JSON.stringify(data.data.slice(0, 10))}`;
+      context += `\n[Category Rental Stats]: ${JSON.stringify(data.data.slice(0, 10))}`;
     }
   }
 
   // Trending / recommendations
-  if (lower.includes('trending') || lower.includes('recommend') || lower.includes('season') || lower.includes('popular today')) {
+  if (lower.includes('trending') || lower.includes('recommend') || lower.includes('season') || lower.includes('what to rent')) {
     const data = await fetchJSON(`${ANALYTICS_SERVICE_URL}/analytics/recommendations?date=${today}&limit=5`);
     if (data?.recommendations) {
-      context += `\n[Today's Recommendations]: ${JSON.stringify(data.recommendations)}`;
+      context += `\n[Today's Top Recommendations (${today})]: ${JSON.stringify(data.recommendations)}`;
     }
   }
 
   // Peak window
-  if (lower.includes('peak') || lower.includes('busiest') || lower.includes('rush') || lower.includes('7 day') || lower.includes('seven day')) {
-    const fromMonth = new Date(Date.now() - 6 * 30 * 24 * 3600 * 1000).toISOString().slice(0, 7);
-    const data = await fetchJSON(`${ANALYTICS_SERVICE_URL}/analytics/peak-window?from=${fromMonth}&to=${currentMonth}`);
+  if (lower.includes('peak') || lower.includes('busiest') || lower.includes('rush') || lower.includes('seven day') || lower.includes('7-day') || lower.includes('7 day')) {
+    const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 3600 * 1000).toISOString().slice(0, 7);
+    const data = await fetchJSON(`${ANALYTICS_SERVICE_URL}/analytics/peak-window?from=${sixMonthsAgo}&to=${currentMonth}`);
     if (data?.peakWindow) {
-      context += `\n[Peak Window]: ${JSON.stringify(data.peakWindow)}`;
+      context += `\n[Peak 7-Day Window]: ${JSON.stringify(data.peakWindow)}`;
     }
   }
 
   // Surge days
-  if (lower.includes('surge') || lower.includes('spike') || lower.includes('pricing')) {
+  if (lower.includes('surge') || lower.includes('spike') || lower.includes('pricing day')) {
     const data = await fetchJSON(`${ANALYTICS_SERVICE_URL}/analytics/surge-days?month=${currentMonth}`);
     if (data?.data) {
       context += `\n[Surge Days for ${currentMonth}]: ${JSON.stringify(data.data.slice(0, 10))}`;
     }
   }
 
-  // Availability check - parse product ID and dates from message
+  // Availability check
   if (lower.includes('availab')) {
-    const pidMatch = message.match(/product[^\d]*(\d+)/i);
+    const pidMatch = message.match(/(?:product|id)[^\d]*(\d+)/i) || message.match(/(\d{2,6})/);
     if (pidMatch) {
       const pid = pidMatch[1];
+      const nextMonth = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().slice(0, 10);
       const data = await fetchJSON(
-        `${RENTAL_SERVICE_URL}/rentals/products/${pid}/availability?from=${today}&to=${new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().slice(0, 10)}`
+        `${RENTAL_SERVICE_URL}/rentals/products/${pid}/availability?from=${today}&to=${nextMonth}`
       );
       if (data) {
-        context += `\n[Product ${pid} Availability]: ${JSON.stringify(data)}`;
+        context += `\n[Product ${pid} Availability (next 30 days)]: ${JSON.stringify(data)}`;
       }
     }
   }
@@ -126,7 +146,7 @@ async function gatherContext(message) {
   return context;
 }
 
-// ── Gemini LLM Call ───────────────────────────────────────────────────────────
+// ── Gemini LLM ────────────────────────────────────────────────────────────────
 
 async function callGemini(messages, systemPrompt) {
   if (!GEMINI_API_KEY) {
@@ -135,36 +155,29 @@ async function callGemini(messages, systemPrompt) {
 
   const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
 
-  // Build contents from message history
   const contents = messages.map(m => ({
     role: m.role === 'assistant' ? 'model' : 'user',
     parts: [{ text: m.content }]
   }));
 
-  const body = {
-    system_instruction: {
-      parts: [{ text: systemPrompt }]
-    },
+  const reqBody = {
+    system_instruction: { parts: [{ text: systemPrompt }] },
     contents,
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 1024,
-    }
+    generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
   };
 
   try {
-    const resp = await fetch(GEMINI_URL, {
+    const resp = await fetchWithTimeout(GEMINI_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      timeout: 30000,
-    });
+      body: JSON.stringify(reqBody),
+    }, 30000);
     const data = await resp.json();
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     return text || 'I could not generate a response. Please try again.';
   } catch (err) {
     console.error('[gemini] error:', err.message);
-    return 'I encountered an error while processing your request.';
+    return 'I encountered an error while processing your request. Please try again.';
   }
 }
 
@@ -173,7 +186,7 @@ async function generateSessionName(firstMessage) {
 
   const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
   try {
-    const resp = await fetch(GEMINI_URL, {
+    const resp = await fetchWithTimeout(GEMINI_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -183,8 +196,7 @@ async function generateSessionName(firstMessage) {
         }],
         generationConfig: { maxOutputTokens: 20 }
       }),
-      timeout: 10000,
-    });
+    }, 10000);
     const data = await resp.json();
     return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || firstMessage.slice(0, 40);
   } catch {
@@ -192,7 +204,7 @@ async function generateSessionName(firstMessage) {
   }
 }
 
-// ── Status ────────────────────────────────────────────────────────────────────
+// ── Status (P1) ───────────────────────────────────────────────────────────────
 
 app.get('/status', (req, res) => {
   res.json({ service: 'agentic-service', status: 'OK' });
@@ -207,61 +219,54 @@ app.post('/chat', async (req, res) => {
     return res.status(400).json({ error: "'sessionId' and 'message' are required." });
   }
 
-  // Keyword guard - refuse off-topic messages without LLM call
+  // Keyword guard — refuse off-topic without LLM call (P15)
   if (!isOnTopic(message)) {
     return res.json({
       sessionId,
-      reply: "I'm RentPi's assistant and can only help with rental-related questions like products, availability, categories, pricing, and trends. Please ask something related to RentPi."
+      reply: "I'm RentPi's assistant and can only help with rental-related questions — products, availability, categories, pricing, trends, and discounts. Please ask something related to RentPi!"
     });
   }
 
   try {
-    // Load or create session
     let session = await Session.findOne({ sessionId });
     const isNewSession = !session;
 
     if (isNewSession) {
       session = new Session({ sessionId });
+      await session.save();
     }
 
-    // Load message history for this session
+    // Load history for multi-turn context (P16)
     const history = await Message.find({ sessionId }).sort({ timestamp: 1 });
 
-    // Gather data context
+    // Gather grounding data
     const context = await gatherContext(message);
 
-    // Build system prompt
-    const systemPrompt = `You are RentPi's AI assistant. You help users with questions about rentals, products, availability, categories, pricing, and trends on the RentPi platform.
-    
-You MUST only answer questions related to RentPi (rentals, products, categories, pricing, availability, trends, discounts).
-If asked anything unrelated, politely decline.
-Never invent or hallucinate numbers. If data is unavailable, say so explicitly.
-${context ? `\nHere is relevant real-time data to answer the user's question:\n${context}` : ''}`;
+    const systemPrompt = `You are RentPi's AI assistant. Answer questions about rentals, products, availability, categories, pricing, and trends on the RentPi platform.
+Only answer RentPi-related questions. For anything else, politely decline.
+Never invent or hallucinate numbers — only use data provided below.
+If no data is available, say so explicitly.${context ? `\n\nREAL-TIME DATA:\n${context}` : ''}`;
 
-    // Build conversation for LLM
     const llmMessages = [
       ...history.map(m => ({ role: m.role, content: m.content })),
       { role: 'user', content: message }
     ];
 
-    // Call Gemini
     const reply = await callGemini(llmMessages, systemPrompt);
 
-    // Save user message
+    // Persist messages
     await Message.create({ sessionId, role: 'user', content: message });
-    // Save assistant reply
     await Message.create({ sessionId, role: 'assistant', content: reply });
 
-    // Update session
-    session.lastMessageAt = new Date();
+    // Update session timestamp
+    const updateData = { lastMessageAt: new Date() };
+    await Session.updateOne({ sessionId }, updateData);
+
+    // Generate session name if new (async, fire-and-forget)
     if (isNewSession) {
-      await session.save();
-      // Generate session name asynchronously (fire and forget)
-      generateSessionName(message).then(async (name) => {
-        await Session.updateOne({ sessionId }, { name });
-      }).catch(() => {});
-    } else {
-      await Session.updateOne({ sessionId }, { lastMessageAt: new Date() });
+      generateSessionName(message).then(name =>
+        Session.updateOne({ sessionId }, { name })
+      ).catch(() => {});
     }
 
     return res.json({ sessionId, reply });
@@ -271,7 +276,7 @@ ${context ? `\nHere is relevant real-time data to answer the user's question:\n$
   }
 });
 
-// ── Sessions (P16) ────────────────────────────────────────────────────────────
+// ── Sessions CRUD (P16) ───────────────────────────────────────────────────────
 
 app.get('/chat/sessions', async (req, res) => {
   try {
@@ -279,7 +284,7 @@ app.get('/chat/sessions', async (req, res) => {
       .sort({ lastMessageAt: -1 })
       .select('sessionId name lastMessageAt -_id');
     res.json({ sessions });
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: 'Failed to fetch sessions.' });
   }
 });
@@ -294,12 +299,8 @@ app.get('/chat/:sessionId/history', async (req, res) => {
       .sort({ timestamp: 1 })
       .select('role content timestamp -_id');
 
-    res.json({
-      sessionId,
-      name: session.name,
-      messages,
-    });
-  } catch (err) {
+    res.json({ sessionId, name: session.name, messages });
+  } catch {
     res.status(500).json({ error: 'Failed to fetch history.' });
   }
 });
@@ -310,12 +311,12 @@ app.delete('/chat/:sessionId', async (req, res) => {
     await Session.deleteOne({ sessionId });
     await Message.deleteMany({ sessionId });
     res.json({ message: `Session ${sessionId} deleted.` });
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: 'Failed to delete session.' });
   }
 });
 
-// ── Connect to MongoDB and Start ──────────────────────────────────────────────
+// ── Connect MongoDB and Start ─────────────────────────────────────────────────
 
 mongoose.connect(MONGO_URI)
   .then(() => {
