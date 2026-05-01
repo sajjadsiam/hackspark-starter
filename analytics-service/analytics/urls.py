@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import StatusView, PeakWindowView, SurgeDaysView, RecommendationsView
+from .views import StatusView, PeakWindowView, SurgeDaysView, RecommendationsView, KthBusiestView
 
 urlpatterns = [
     # Status
@@ -13,4 +13,6 @@ urlpatterns = [
     path('analytics/surge-days', SurgeDaysView.as_view()),
     path('recommendations', RecommendationsView.as_view()),
     path('analytics/recommendations', RecommendationsView.as_view()),
+    path('kth-busiest', KthBusiestView.as_view()),
+    path('analytics/kth-busiest', KthBusiestView.as_view()),
 ]

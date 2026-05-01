@@ -120,6 +120,57 @@ class PeakWindowView(APIView):
         })
 
 
+class KthBusiestView(APIView):
+    """
+    P8: Kth Busiest Month
+    Calculates the kth busiest month in the last 12 months.
+    """
+    def get(self, request):
+        k_str = request.query_params.get('k', '1')
+        try:
+            k = int(k_str)
+            if k <= 0: raise ValueError
+        except (ValueError, TypeError):
+            return Response({"error": "'k' must be a positive integer."}, http_status.HTTP_400_BAD_REQUEST)
+
+        # Look back 12 months from current date
+        today = date.today()
+        from_y = today.year - 1
+        from_m = today.month
+        to_y = today.year
+        to_m = today.month
+
+        # Fetch stats per month
+        month_counts = []
+        cur_y, cur_m = from_y, from_m
+        while (cur_y, cur_m) <= (to_y, to_m):
+            month_str = f"{cur_y}-{cur_m:02d}"
+            status_code, data = central_api.get_rentals_stats_by_date(month_str)
+            if status_code == 200:
+                # Sum daily counts for this month
+                monthly_total = sum(item['count'] for item in data.get('data', []))
+                month_counts.append({"month": month_str, "count": monthly_total})
+            
+            # Increment month
+            cur_m += 1
+            if cur_m > 12:
+                cur_m = 1
+                cur_y += 1
+
+        if k > len(month_counts):
+            return Response({"error": f"Not enough data to find {k}th busiest month (only {len(month_counts)} months available)."}, http_status.HTTP_404_NOT_FOUND)
+
+        # Sort by count descending, then by month ascending (tie-breaker)
+        sorted_months = sorted(month_counts, key=lambda x: (-x['count'], x['month']))
+        kth_item = sorted_months[k-1]
+
+        return Response({
+            "k": k,
+            "month": kth_item['month'],
+            "totalRentals": kth_item['count']
+        })
+
+
 class SurgeDaysView(APIView):
     """
     P13: Chasing the Surge
