@@ -155,7 +155,8 @@ async function gatherContext(message) {
 // ── Gemini LLM ────────────────────────────────────────────────────────────────
 
 async function callGemini(messages, systemPrompt) {
-  if (!GEMINI_API_KEY) {
+  const validKey = GEMINI_API_KEY && GEMINI_API_KEY !== 'your_gemini_api_key_here';
+  if (!validKey) {
     return "I'm sorry, the AI service is not configured. Please contact the administrator.";
   }
 
@@ -188,7 +189,8 @@ async function callGemini(messages, systemPrompt) {
 }
 
 async function generateSessionName(firstMessage) {
-  if (!GEMINI_API_KEY) return firstMessage.slice(0, 40);
+  const validKey = GEMINI_API_KEY && GEMINI_API_KEY !== 'your_gemini_api_key_here';
+  if (!validKey) return firstMessage.slice(0, 40);
 
   const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
   try {
@@ -213,6 +215,11 @@ async function generateSessionName(firstMessage) {
 // ── Status (P1) ───────────────────────────────────────────────────────────────
 
 app.get('/status', (req, res) => {
+  res.json({ service: 'agentic-service', status: 'OK' });
+});
+
+// Alias for when gateway forwards /chat/status without stripping prefix
+app.get('/chat/status', (req, res) => {
   res.json({ service: 'agentic-service', status: 'OK' });
 });
 

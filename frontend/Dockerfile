@@ -1,30 +1,33 @@
-# ── Stage 1: builder (needs ALL deps including devDeps for next build) ─────────
+# ── Stage 1: builder ─────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
+LABEL stage=builder
 
 WORKDIR /app
 
-COPY package.json ./
+# Install dependencies (including devDeps for build)
+COPY package*.json ./
 RUN npm install
 
+# Copy source and build
 COPY . .
-
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NEXT_PUBLIC_GATEWAY_URL=http://localhost:8000
-
 RUN npm run build
 
-# ── Stage 2: runtime (standalone output) ──────────────────────────────────────
+# ── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM node:20-alpine AS runtime
+LABEL stage=runtime
+LABEL service="frontend"
 
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Set up user
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Next.js standalone output contains everything it needs
+# Copy standalone output
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public

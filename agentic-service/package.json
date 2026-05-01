@@ -11,7 +11,9 @@
     "mongoose": "^8.4.1",
     "node-fetch": "^2.7.0",
     "cors": "^2.8.5",
-    "uuid": "^10.0.0"
+    "uuid": "^10.0.0",
+    "@grpc/grpc-js": "^1.10.8",
+    "@grpc/proto-loader": "^0.7.13"
   },
   "engines": {
     "node": ">=20"

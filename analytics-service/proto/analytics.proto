@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package analytics;
+
+service AnalyticsService {
+  rpc GetRecommendations (RecommendationsRequest) returns (RecommendationsResponse);
+}
+
+message RecommendationsRequest {
+  string date = 1;
+  int32 limit = 2;
+}
+
+message Recommendation {
+  int32 id = 1;
+  string name = 2;
+  string category = 3;
+  double score = 4;
+  string reason = 5;
+}
+
+message RecommendationsResponse {
+  repeated Recommendation recommendations = 1;
+}

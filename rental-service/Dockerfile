@@ -1,5 +1,7 @@
-# ── Stage 1: builder ──────────────────────────────────────────────────────────
+# ── Stage 1: builder ─────────────────────────────────────────────────────────
 FROM python:3.12-alpine AS builder
+
+LABEL stage="builder"
 
 WORKDIR /build
 
@@ -9,15 +11,18 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --prefix=/install --no-cache-dir -r requirements.txt
 
-# ── Stage 2: runtime ──────────────────────────────────────────────────────────
+# ── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM python:3.12-alpine AS runtime
+
+LABEL stage="runtime"
+LABEL service="rental-service"
 
 WORKDIR /app
 
+RUN apk add --no-cache wget
+
 COPY --from=builder /install /usr/local
 COPY . .
-
-RUN apk add --no-cache wget
 
 EXPOSE 8002
 

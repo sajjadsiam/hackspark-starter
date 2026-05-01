@@ -54,7 +54,7 @@ class RegisterView(APIView):
                 "name": user.name,
                 "email": user.email,
             },
-            **tokens,
+            "jwt": tokens['access'],
         }, status=status.HTTP_201_CREATED)
 
 
@@ -91,7 +91,7 @@ class LoginView(APIView):
                 "name": user.name,
                 "email": user.email,
             },
-            **tokens,
+            "jwt": tokens['access'],
         })
 
 
@@ -132,7 +132,7 @@ class DiscountView(APIView):
             resp = requests.get(
                 f"{central_url}/api/data/users/{user_id}",
                 headers={"Authorization": f"Bearer {central_token}"},
-                timeout=10
+                timeout=15
             )
         except requests.RequestException as e:
             return Response({"error": "Central API unreachable."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)

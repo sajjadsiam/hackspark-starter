@@ -1,7 +1,8 @@
 /**
- * RentPi API Gateway
- * Routes all traffic to downstream services.
- * Aggregates /status from all services in parallel (P1).
+ * RentPi API Gateway v2
+ * - Routes requests to downstream services (NO body parsing here)
+ * - Aggregates /status from all services in parallel (P1)
+ * - Adds security headers (P4/security)
  */
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
@@ -16,19 +17,29 @@ const RENTAL_SERVICE_URL    = process.env.RENTAL_SERVICE_URL    || 'http://renta
 const ANALYTICS_SERVICE_URL = process.env.ANALYTICS_SERVICE_URL || 'http://analytics-service:8003';
 const AGENTIC_SERVICE_URL   = process.env.AGENTIC_SERVICE_URL   || 'http://agentic-service:8004';
 
+// ── Security Headers ──────────────────────────────────────────────────────────
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  next();
+});
+
 app.use(cors());
-app.use(express.json());
+
+// IMPORTANT: Do NOT add express.json() / body-parser here.
+// express.json() consumes the request body stream before http-proxy-middleware
+// can forward it to downstream services, causing all POST/PUT requests to hang
+// or fail with 400 Bad Request.
 
 // ── Health Aggregator (P1) ────────────────────────────────────────────────────
-
 async function checkService(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
   try {
     const resp = await fetch(`${url}/status`, { signal: controller.signal });
     clearTimeout(timer);
-    if (resp.ok) return 'OK';
-    return 'UNREACHABLE';
+    return resp.ok ? 'OK' : 'UNREACHABLE';
   } catch {
     clearTimeout(timer);
     return 'UNREACHABLE';
@@ -55,47 +66,58 @@ app.get('/status', async (req, res) => {
   });
 });
 
-// ── Proxy Routes ─────────────────────────────────────────────────────────────
-
-function makeProxy(target, prefix) {
-  return createProxyMiddleware({
-    target,
-    changeOrigin: true,
-    pathRewrite: (path, req) => {
-      // path here is the URL after Express stripped the mount point.
-      // So if mount point was /users, path is /admin/users
-      // We want to add /users back
-      return prefix + path;
-    },
-    on: {
-      error: (err, req, res) => {
-        console.error(`[gateway] proxy error to ${target}:`, err.message);
-        if (res && !res.headersSent) {
-          res.status(502).json({ error: 'Bad Gateway', target });
-        }
-      }
-    }
-  });
+// ── Proxy Error Handler ───────────────────────────────────────────────────────
+function onError(err, req, res) {
+  console.error(`[gateway] proxy error:`, err.message);
+  if (res && !res.headersSent) {
+    res.status(502).json({ error: 'Bad Gateway', detail: err.message });
+  }
 }
 
-// Routes must be set BEFORE proxy middleware
-app.use(createProxyMiddleware('/users',     { target: USER_SERVICE_URL,      changeOrigin: true }));
-app.use(createProxyMiddleware('/rentals',   { target: RENTAL_SERVICE_URL,    changeOrigin: true }));
-app.use(createProxyMiddleware('/analytics', { target: ANALYTICS_SERVICE_URL,  changeOrigin: true }));
-app.use(createProxyMiddleware('/chat',      { target: AGENTIC_SERVICE_URL,   changeOrigin: true }));
+// ── Proxy Routes ──────────────────────────────────────────────────────────────
+// Using pathFilter at root: does NOT strip the matched prefix.
+// All services define routes WITH their prefix (e.g. /users/register).
+// The agentic-service is special: its routes are already prefixed with /chat
+// (e.g. POST /chat, GET /chat/sessions) so no stripping needed.
+
+app.use(createProxyMiddleware({
+  target: USER_SERVICE_URL,
+  changeOrigin: true,
+  pathFilter: '/users',
+  on: { error: onError }
+}));
+
+app.use(createProxyMiddleware({
+  target: RENTAL_SERVICE_URL,
+  changeOrigin: true,
+  pathFilter: '/rentals',
+  on: { error: onError }
+}));
+
+app.use(createProxyMiddleware({
+  target: ANALYTICS_SERVICE_URL,
+  changeOrigin: true,
+  pathFilter: '/analytics',
+  on: { error: onError }
+}));
+
+app.use(createProxyMiddleware({
+  target: AGENTIC_SERVICE_URL,
+  changeOrigin: true,
+  pathFilter: '/chat',
+  on: { error: onError }
+}));
 
 // ── Fallback ──────────────────────────────────────────────────────────────────
-
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found', path: req.path });
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────
-
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[api-gateway] listening on port ${PORT}`);
-  console.log(`  user-service:      ${USER_SERVICE_URL}`);
-  console.log(`  rental-service:    ${RENTAL_SERVICE_URL}`);
-  console.log(`  analytics-service: ${ANALYTICS_SERVICE_URL}`);
-  console.log(`  agentic-service:   ${AGENTIC_SERVICE_URL}`);
+  console.log(`  → user-service:      ${USER_SERVICE_URL}`);
+  console.log(`  → rental-service:    ${RENTAL_SERVICE_URL}`);
+  console.log(`  → analytics-service: ${ANALYTICS_SERVICE_URL}`);
+  console.log(`  → agentic-service:   ${AGENTIC_SERVICE_URL}`);
 });
