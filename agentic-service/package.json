@@ -1,0 +1,19 @@
+{
+  "name": "agentic-service",
+  "version": "1.0.0",
+  "description": "RentPi AI Agentic Service with chat memory",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mongoose": "^8.4.1",
+    "node-fetch": "^2.7.0",
+    "cors": "^2.8.5",
+    "uuid": "^10.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
