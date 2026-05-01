@@ -23,11 +23,17 @@ def _get_headers():
     return {"Authorization": f"Bearer {settings.CENTRAL_API_TOKEN}"}
 
 
+_request_cache = {}
+
 def central_get(path, params=None, retries=3):
     """
     GET from the Central API with exponential backoff on 429.
     Returns (status_code, data_dict)
     """
+    cache_key = (path, frozenset(params.items()) if params else None)
+    if cache_key in _request_cache:
+        return 200, _request_cache[cache_key]
+
     url = f"{settings.CENTRAL_API_URL}{path}"
     attempt = 0
     retry_after = 0
@@ -40,31 +46,34 @@ def central_get(path, params=None, retries=3):
             return 503, {"error": "Central API unreachable."}
 
         if resp.status_code == 429:
-            if attempt >= retries:
-                return 503, {
-                    "error": f"Central API unavailable after {retries} retries",
-                    "lastRetryAfter": retry_after,
-                    "suggestion": "Try again in ~2 minutes"
-                }
             body = {}
             try:
                 body = resp.json()
             except Exception:
                 pass
             retry_after = body.get('retryAfterSeconds', 60)
-            # Exponential backoff with ±20% jitter
             wait = retry_after * (2 ** attempt)
             jitter = wait * 0.2 * random.uniform(-1, 1)
             wait = max(1, wait + jitter)
+            
+            if wait > 5 or attempt >= retries:
+                body['_headers'] = dict(resp.headers)
+                return 429, body
+                
             attempt += 1
             logger.info(f"[retry {attempt}/{retries}] waiting {wait:.1f}s before retrying GET {path}")
             time.sleep(wait)
             continue
-
+            
         try:
             data = resp.json()
         except Exception:
             data = {}
+
+        if resp.status_code == 200:
+            _request_cache[cache_key] = data
+        elif resp.status_code == 429:
+            data['_headers'] = dict(resp.headers)
 
         return resp.status_code, data
 
@@ -116,8 +125,13 @@ def get_rentals_stats(params=None):
     return central_get('/api/data/rentals/stats', params=params)
 
 
+_product_rentals_cache = {}
+
 def get_all_rentals_for_product(product_id):
     """Paginate through all rentals for a product."""
+    if product_id in _product_rentals_cache:
+        return _product_rentals_cache[product_id]
+        
     rentals = []
     page = 1
     while True:
@@ -134,6 +148,8 @@ def get_all_rentals_for_product(product_id):
         if len(rentals) >= total or not batch:
             break
         page += 1
+        
+    _product_rentals_cache[product_id] = rentals
     return rentals
 
 

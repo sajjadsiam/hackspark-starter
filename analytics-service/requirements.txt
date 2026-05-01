@@ -4,3 +4,5 @@ django-cors-headers==4.4.0
 requests==2.32.3
 python-decouple==3.8
 gunicorn==22.0.0
+grpcio==1.62.1
+grpcio-tools==1.62.1

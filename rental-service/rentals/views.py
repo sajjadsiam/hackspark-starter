@@ -116,7 +116,8 @@ class ProductsListView(APIView):
         if status_code == 404:
             return Response({"error": "Not found."}, status=404)
         if status_code == 429:
-            return Response({"error": "Rate limit exceeded."}, status=429)
+            headers = data.pop('_headers', {}) if isinstance(data, dict) else {}
+            return Response({"error": "Rate limit exceeded."}, status=429, headers=headers)
         if status_code != 200:
             return Response({"error": "Central API error.", "detail": data}, status=status_code)
 
@@ -132,7 +133,8 @@ class ProductDetailView(APIView):
         if status_code == 404:
             return Response({"error": f"Product {product_id} not found."}, status=404)
         if status_code == 429:
-            return Response({"error": "Rate limit exceeded."}, status=429)
+            headers = data.pop('_headers', {}) if isinstance(data, dict) else {}
+            return Response({"error": "Rate limit exceeded."}, status=429, headers=headers)
         if status_code != 200:
             return Response({"error": "Central API error."}, status=status_code)
 

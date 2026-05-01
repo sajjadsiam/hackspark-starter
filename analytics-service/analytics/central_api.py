@@ -14,8 +14,13 @@ logger = logging.getLogger(__name__)
 def _get_headers():
     return {"Authorization": f"Bearer {settings.CENTRAL_API_TOKEN}"}
 
+_request_cache = {}
 
 def central_get(path, params=None, retries=3):
+    cache_key = (path, frozenset(params.items()) if params else None)
+    if cache_key in _request_cache:
+        return 200, _request_cache[cache_key]
+
     url = f"{settings.CENTRAL_API_URL}{path}"
     attempt = 0
     retry_after = 0
@@ -28,12 +33,6 @@ def central_get(path, params=None, retries=3):
             return 503, {"error": "Central API unreachable."}
 
         if resp.status_code == 429:
-            if attempt >= retries:
-                return 503, {
-                    "error": f"Central API unavailable after {retries} retries",
-                    "lastRetryAfter": retry_after,
-                    "suggestion": "Try again in ~2 minutes"
-                }
             body = {}
             try:
                 body = resp.json()
@@ -43,6 +42,11 @@ def central_get(path, params=None, retries=3):
             wait = retry_after * (2 ** attempt)
             jitter = wait * 0.2 * random.uniform(-1, 1)
             wait = max(1, wait + jitter)
+            
+            if wait > 5 or attempt >= retries:
+                body['_headers'] = dict(resp.headers)
+                return 429, body
+                
             attempt += 1
             logger.info(f"[retry {attempt}/{retries}] waiting {wait:.1f}s before retrying GET {path}")
             time.sleep(wait)
@@ -53,14 +57,26 @@ def central_get(path, params=None, retries=3):
         except Exception:
             data = {}
 
+        if resp.status_code == 200:
+            _request_cache[cache_key] = data
+        elif resp.status_code == 429:
+            data['_headers'] = dict(resp.headers)
+
         return resp.status_code, data
 
     return 503, {"error": "Central API unavailable after retries."}
 
+_stats_cache = {}
 
 def get_rentals_stats_by_date(month_str):
     """Fetch rental stats grouped by date for a single month."""
-    return central_get('/api/data/rentals/stats', params={'group_by': 'date', 'month': month_str})
+    if month_str in _stats_cache:
+        return 200, _stats_cache[month_str]
+    
+    status_code, data = central_get('/api/data/rentals/stats', params={'group_by': 'date', 'month': month_str})
+    if status_code == 200:
+        _stats_cache[month_str] = data
+    return status_code, data
 
 
 def get_rentals_stats_by_category():
